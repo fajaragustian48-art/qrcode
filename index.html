@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Absensi QR Code - EduDigi</title>
+    
+    <link rel="manifest" href="data:application/manifest+json;utf8,%7B%22name%22%3A%22EduDigi%20Absensi%20QR%22%2C%22short_name%22%3A%22AbsensiQR%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23f8fafc%22%2C%22theme_color%22%3A%22%232563eb%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22https%3A%2F%2Fcdn-icons-png.flaticon.com%2F512%2F3483%2F3483011.png%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fpng%22%7D%5D%7D">
+    <meta name="theme-color" content="#2563eb">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .glass {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+        .glass-dark {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 9999px;
+        }
+        @media print {
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col antialiased selection:bg-blue-500 selection:text-white">
+
+    <div id="previewBanner" class="hidden bg-amber-500 text-white px-4 py-2 text-xs font-medium text-center shadow-md flex items-center justify-between sticky top-0 z-50">
+        <div class="flex items-center gap-2 mx-auto">
+            <i data-lucide="flask-conical" class="w-4 h-4 animate-bounce"></i>
+            <span><strong>MODE PREVIEW:</strong> Menjalankan simulasi data lokal tanpa Firebase Firestore.</span>
+            <span class="hidden md:inline-block bg-amber-600 px-2 py-0.5 rounded text-[10px]">Admin: admin@edudigi.com / admin123 | Peserta ID: 1001 / siswa123</span>
+        </div>
+    </div>
+
+    <div id="app" class="flex-1 flex flex-col md:flex-row min-h-screen relative">
+
+        <aside id="sidebar" class="hidden md:flex flex-col w-64 bg-slate-900 text-slate-200 fixed left-0 top-0 bottom-0 z-40 shadow-xl transition-all duration-300">
+            <div class="p-5 border-b border-slate-800 flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center font-bold text-white shadow-lg shadow-blue-500/30">
+                    <i data-lucide="qr-code" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-base text-white tracking-wide">EduDigi Absensi</h1>
+                    <p class="text-[11px] text-slate-400">QR Code Attendance System</p>
+                </div>
+            </div>
+
+            <div class="px-4 py-3 border-b border-slate-800/60 bg-slate-950/40">
+                <div class="text-xs text-slate-400 mb-1">Pengguna Aktif:</div>
+                <div id="sidebarUserName" class="font-semibold text-sm text-white truncate">-</div>
+                <div id="sidebarUserRole" class="inline-block mt-1 px-2 py-0.5 text-[10px] font-semibold rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">Guest</div>
+            </div>
+
+            <nav class="flex-1 p-3 space-y-1 overflow-y-auto custom-scrollbar">
+                <button onclick="navigateTo('dashboard')" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-300 hover:bg-slate-800 hover:text-white" data-page="dashboard">
+                    <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+                    <span>Dashboard</span>
+                </button>
+                <button onclick="navigateTo('scan')" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-300 hover:bg-slate-800 hover:text-white" data-page="scan">
+                    <i data-lucide="camera" class="w-4 h-4"></i>
+                    <span>Pemindai QR</span>
+                </button>
+                <button onclick="navigateTo('participants')" class="nav-item admin-only w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-300 hover:bg-slate-800 hover:text-white" data-page="participants">
+                    <i data-lucide="users" class="w-4 h-4"></i>
+                    <span>Kelola Peserta</span>
+                </button>
+                <button onclick="navigateTo('qr-generator')" class="nav-item admin-only w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-300 hover:bg-slate-800 hover:text-white" data-page="qr-generator">
+                    <i data-lucide="qr-code" class="w-4 h-4"></i>
+                    <span>Generator QR</span>
+                </button>
+                <button onclick="navigateTo('reports')" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-300 hover:bg-slate-800 hover:text-white" data-page="reports">
+                    <i data-lucide="file-text" class="w-4 h-4"></i>
+                    <span id="reportNavTitle">Laporan Kehadiran</span>
+                </button>
+            </nav>
+
+            <div class="p-3 border-t border-slate-800">
+                <button onclick="handleLogout()" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-all">
+                    <i data-lucide="log-out" class="w-4 h-4"></i>
+                    <span>Keluar Application</span>
+                </button>
+            </div>
+        </aside>
+
+        <main class="flex-1 md:ml-64 pb-24 md:pb-6 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full">
+
+            <section id="authSection" class="min-h-[85vh] flex items-center justify-center py-6">
+                <div class="w-full max-w-md bg-white rounded-2xl shadow-xl border border-slate-100 p-6 sm:p-8">
+                    <div class="text-center mb-6">
+                        <div class="w-14 h-14 bg-blue-600 rounded-2xl mx-auto flex items-center justify-center text-white shadow-lg shadow-blue-500/30 mb-3">
+                            <i data-lucide="qr-code" class="w-8 h-8"></i>
+                        </div>
+                        <h2 class="text-2xl font-bold text-slate-900">EduDigi Absensi</h2>
+                        <p class="text-slate-500 text-sm mt-1">Sistem Presensi Digital Realtime</p>
+                    </div>
+
+                    <!-- Role Switcher Tab -->
+                    <div class="grid grid-cols-2 p-1 bg-slate-100 rounded-xl mb-6">
+                        <button type="button" id="tabAdmin" onclick="switchAuthTab('admin')" class="py-2 text-xs font-semibold rounded-lg transition-all bg-white text-blue-600 shadow-sm">
+                            Admin / Operator
+                        </button>
+                        <button type="button" id="tabUser" onclick="switchAuthTab('user')" class="py-2 text-xs font-semibold rounded-lg transition-all text-slate-600 hover:text-slate-900">
+                            Peserta / Siswa
+                        </button>
+                    </div>
+
+                    <form id="loginForm" onsubmit="handleLogin(event)" class="space-y-4">
+                        <div id="adminLoginFields">
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Email Admin</label>
+                            <input type="email" id="loginEmail" placeholder="admin@sekolah.sch.id" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                        </div>
+
+                        <div id="userLoginFields" class="hidden">
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">NIS / ID Peserta</label>
+                            <input type="text" id="loginUserNis" placeholder="Masukkan ID / NIS" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Kata Sandi</label>
+                            <input type="password" id="loginPassword" placeholder="••••••••" required class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                        </div>
+
+                        <div id="loginError" class="hidden p-3 rounded-xl bg-rose-50 text-rose-600 text-xs font-medium border border-rose-100"></div>
+
+                        <button type="submit" id="btnLogin" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl shadow-lg shadow-blue-500/20 transition-all text-sm flex items-center justify-center gap-2">
+                            <span>Masuk ke Sistem</span>
+                            <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                        </button>
+                    </form>
+                </div>
+            </section>
+
+            <section id="dashboardPage" class="page-content hidden space-y-6">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-900">Ringkasan Presensi</h2>
+                        <p class="text-slate-500 text-sm">Pemantauan kehadiran peserta secara realtime.</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="navigateTo('scan')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-medium shadow-md shadow-blue-500/20 flex items-center gap-2 transition-all">
+                            <i data-lucide="camera" class="w-4 h-4"></i>
+                            <span>Buka Pemindai QR</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Stats Cards -->
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
+                        <div class="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                            <i data-lucide="users" class="w-6 h-6"></i>
+                        </div>
+                        <div>
+                            <div class="text-xs font-medium text-slate-500">Total Peserta</div>
+                            <div id="statTotalUsers" class="text-xl font-bold text-slate-900">0</div>
+                        </div>
+                    </div>
+                    <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
+                        <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                            <i data-lucide="user-check" class="w-6 h-6"></i>
+                        </div>
+                        <div>
+                            <div class="text-xs font-medium text-slate-500">Hadir Hari Ini</div>
+                            <div id="statPresentToday" class="text-xl font-bold text-slate-900">0</div>
+                        </div>
+                    </div>
+                    <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
+                        <div class="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                            <i data-lucide="clock" class="w-6 h-6"></i>
+                        </div>
+                        <div>
+                            <div class="text-xs font-medium text-slate-500">Terlambat</div>
+                            <div id="statLateToday" class="text-xl font-bold text-slate-900">0</div>
+                        </div>
+                    </div>
+                    <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
+                        <div class="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                            <i data-lucide="activity" class="w-6 h-6"></i>
+                        </div>
+                        <div>
+                            <div class="text-xs font-medium text-slate-500">Persentase Kehadiran</div>
+                            <div id="statPercentage" class="text-xl font-bold text-slate-900">0%</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Activity Table -->
+                <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                    <div class="p-5 border-b border-slate-100 flex items-center justify-between">
+                        <h3 class="font-bold text-slate-900 text-base">Presensi Terkini</h3>
+                        <span id="currentDateBadge" class="text-xs font-medium bg-slate-100 text-slate-600 px-3 py-1 rounded-full"></span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm text-slate-600">
+                            <thead class="bg-slate-50 text-slate-500 text-xs uppercase font-semibold">
+                                <tr>
+                                    <th class="px-5 py-3.5">Nama Peserta</th>
+                                    <th class="px-5 py-3.5">NIS / ID</th>
+                                    <th class="px-5 py-3.5">Waktu Presensi</th>
+                                    <th class="px-5 py-3.5">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recentAttendanceTable" class="divide-y divide-slate-100">
+                                <!-- Dynamic rows -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <section id="scanPage" class="page-content hidden space-y-6">
+                <div class="text-center max-w-xl mx-auto">
+                    <h2 class="text-2xl font-bold text-slate-900">Pemindai QR Code</h2>
+                    <p class="text-slate-500 text-sm mt-1">Arahkan kamera ke QR Code peserta untuk mencatat kehadiran secara otomatis.</p>
+                </div>
+
+                <div class="max-w-md mx-auto bg-white p-6 rounded-2xl shadow-xl border border-slate-100">
+                    <div class="relative overflow-hidden rounded-xl bg-slate-900 aspect-square flex items-center justify-center border-2 border-dashed border-slate-700" id="readerContainer">
+                        <div id="reader" class="w-full h-full"></div>
+                    </div>
+
+                    <div class="mt-4 flex items-center justify-between gap-3">
+                        <button id="btnToggleCamera" onclick="toggleCameraScanner()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-xl text-sm transition-all flex items-center justify-center gap-2">
+                            <i data-lucide="video" class="w-4 h-4"></i>
+                            <span id="btnCameraText">Mulai Kamera</span>
+                        </button>
+                    </div>
+
+                    <!-- Scan Feedback Box -->
+                    <div id="scanResultBox" class="hidden mt-4 p-4 rounded-xl text-center text-sm font-medium transition-all"></div>
+                </div>
+            </section>
+
+            <section id="participantsPage" class="page-content hidden space-y-6">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-900">Kelola Peserta</h2>
+                        <p class="text-slate-500 text-sm">Daftar akun peserta yang terdaftar dalam sistem.</p>
+                    </div>
+                    <button onclick="openAddParticipantModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-sm font-medium shadow-md shadow-blue-500/20 flex items-center gap-2 transition-all">
+                        <i data-lucide="user-plus" class="w-4 h-4"></i>
+                        <span>Tambah Peserta</span>
+                    </button>
+                </div>
+
+                <!-- Search Filter -->
+                <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-3">
+                    <i data-lucide="search" class="w-5 h-5 text-slate-400"></i>
+                    <input type="text" id="searchParticipantInput" onkeyup="renderParticipantsTable()" placeholder="Cari berdasarkan nama, NIS, atau kelas..." class="w-full bg-transparent text-sm focus:outline-none">
+                </div>
+
+                <!-- Table -->
+                <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm text-slate-600">
+                            <thead class="bg-slate-50 text-slate-500 text-xs uppercase font-semibold">
+                                <tr>
+                                    <th class="px-5 py-3.5">NIS / ID</th>
+                                    <th class="px-5 py-3.5">Nama Lengkap</th>
+                                    <th class="px-5 py-3.5">Kelas / Jabatan</th>
+                                    <th class="px-5 py-3.5 text-right">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="participantsTableBody" class="divide-y divide-slate-100">
+                                <!-- Dynamic rows -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <section id="qr-generatorPage" class="page-content hidden space-y-6">
+                <div class="text-center max-w-xl mx-auto">
+                    <h2 class="text-2xl font-bold text-slate-900">Generator QR Code Card</h2>
+                    <p class="text-slate-500 text-sm mt-1">Pilih peserta untuk membuat Kartu QR Code Identitas yang siap dicetak.</p>
+                </div>
+
+                <div class="max-w-md mx-auto space-y-4">
+                    <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm space-y-3">
+                        <label class="block text-xs font-semibold text-slate-600">Pilih Peserta</label>
+                        <select id="qrSelectParticipant" onchange="generateSelectedQR()" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="">-- Pilih Peserta --</option>
+                        </select>
+                    </div>
+
+                    <!-- ID Card Preview Box -->
+                    <div id="qrCardPreview" class="hidden bg-white rounded-2xl border border-slate-200 shadow-xl p-6 text-center space-y-4 relative overflow-hidden">
+                        <div class="border-b border-slate-100 pb-3">
+                            <h3 class="font-bold text-lg text-slate-900">KARTU PRESENSI DIGITAL</h3>
+                            <p class="text-xs text-blue-600 font-semibold uppercase tracking-wider">EduDigi QR System</p>
+                        </div>
+                        
+                        <div id="qrcodeBox" class="flex justify-center my-4"></div>
+
+                        <div>
+                            <h4 id="cardParticipantName" class="font-bold text-lg text-slate-900">Nama Peserta</h4>
+                            <p id="cardParticipantNis" class="text-sm font-medium text-slate-500">NIS: -</p>
+                            <p id="cardParticipantClass" class="text-xs text-slate-400 mt-0.5">Kelas: -</p>
+                        </div>
+
+                        <button onclick="window.print()" class="w-full bg-slate-900 hover:bg-slate-800 text-white py-2.5 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2">
+                            <i data-lucide="printer" class="w-4 h-4"></i>
+                            <span>Cetak Kartu ID</span>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <section id="reportsPage" class="page-content hidden space-y-6">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-900">Laporan & Rekapitulasi</h2>
+                        <p class="text-slate-500 text-sm">Riwayat catatan presensi secara detail.</p>
+                    </div>
+                    <button onclick="exportToCSV()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-medium shadow-md shadow-emerald-500/20 flex items-center gap-2 transition-all">
+                        <i data-lucide="download" class="w-4 h-4"></i>
+                        <span>Ekspor CSV</span>
+                    </button>
+                </div>
+
+                <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col sm:flex-row items-center gap-3">
+                    <input type="date" id="filterReportDate" onchange="renderReportsTable()" class="px-3 py-2 rounded-xl border border-slate-200 text-sm w-full sm:w-auto">
+                    <select id="filterReportStatus" onchange="renderReportsTable()" class="px-3 py-2 rounded-xl border border-slate-200 text-sm w-full sm:w-auto">
+                        <option value="ALL">Semua Status</option>
+                        <option value="Hadir">Hadir</option>
+                        <option value="Terlambat">Terlambat</option>
+                    </select>
+                </div>
+
+                <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm text-slate-600">
+                            <thead class="bg-slate-50 text-slate-500 text-xs uppercase font-semibold">
+                                <tr>
+                                    <th class="px-5 py-3.5">Tanggal</th>
+                                    <th class="px-5 py-3.5">Waktu</th>
+                                    <th class="px-5 py-3.5">Nama Peserta</th>
+                                    <th class="px-5 py-3.5">NIS / ID</th>
+                                    <th class="px-5 py-3.5">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="reportsTableBody" class="divide-y divide-slate-100">
+                                <!-- Dynamic rows -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <nav class="md:hidden fixed bottom-0 left-0 right-0 glass border-t border-slate-200/80 p-2 z-40 flex items-center justify-around shadow-lg">
+            <button onclick="navigateTo('dashboard')" class="mobile-nav-item flex flex-col items-center gap-1 p-2 text-slate-500 hover:text-blue-600" data-page="dashboard">
+                <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
+                <span class="text-[10px] font-medium">Dashboard</span>
+            </button>
+            <button onclick="navigateTo('scan')" class="mobile-nav-item flex flex-col items-center gap-1 p-2 text-slate-500 hover:text-blue-600" data-page="scan">
+                <i data-lucide="camera" class="w-5 h-5"></i>
+                <span class="text-[10px] font-medium">Scan QR</span>
+            </button>
+            <button onclick="navigateTo('participants')" class="mobile-nav-item admin-only flex flex-col items-center gap-1 p-2 text-slate-500 hover:text-blue-600" data-page="participants">
+                <i data-lucide="users" class="w-5 h-5"></i>
+                <span class="text-[10px] font-medium">Peserta</span>
+            </button>
+            <button onclick="navigateTo('reports')" class="mobile-nav-item flex flex-col items-center gap-1 p-2 text-slate-500 hover:text-blue-600" data-page="reports">
+                <i data-lucide="file-text" class="w-5 h-5"></i>
+                <span class="text-[10px] font-medium">Laporan</span>
+            </button>
+        </nav>
+    </div>
+
+    <div id="addParticipantModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-md p-6 space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-lg text-slate-900">Tambah Peserta Baru</h3>
+                <button onclick="closeAddParticipantModal()" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <form id="addParticipantForm" onsubmit="saveParticipant(event)" class="space-y-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">NIS / ID Peserta</label>
+                    <input type="text" id="newNis" required class="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Nama Lengkap</label>
+                    <input type="text" id="newName" required class="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Kelas / Jabatan</label>
+                    <input type="text" id="newClass" required class="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Kata Sandi Akun</label>
+                    <input type="password" id="newPassword" required class="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div class="pt-2 flex items-center gap-2">
+                    <button type="button" onclick="closeAddParticipantModal()" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2 rounded-xl text-sm transition-all">Batal</button>
+                    <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-xl text-sm shadow-md shadow-blue-500/20 transition-all">Simpan Data</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script type="module">
+        // KONFIGURASI APLIKASI
+        const IS_PREVIEW = true; // Ubah menjadi false SAAT DEPLOY / PUBLISH agar terhubung murni ke Firebase tanpa data dummy
+
+        // PASTE FIREBASE CONFIG ANDA DI SINI
+        const firebaseConfig = {
+           apiKey: "AIzaSyBN1dfgt4L_IOdi4HW6vp8WchaYdl8JPTM",
+  authDomain: "qrcode-98023.firebaseapp.com",
+  projectId: "qrcode-98023",
+  storageBucket: "qrcode-98023.firebasestorage.app",
+  messagingSenderId: "1071038638004",
+  appId: "1:1071038638004:web:cb988d77f8b6c7a1eb74e1"
+        };
+
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, addDoc, getDocs, doc, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        // Global State Management
+        let appFirebase, auth, db;
+        let html5QrcodeScanner = null;
+        let isScannerActive = false;
+        let authRole = 'admin'; // 'admin' or 'user'
+
+        let state = {
+            currentUser: null,
+            users: [],
+            attendances: []
+        };
+
+        const dummyUsers = [
+            { id: '1', nis: '1001', name: 'Ahmad Fauzi', class: 'XII-IPA-1', password: 'siswa123' },
+            { id: '2', nis: '1002', name: 'Siti Nurhaliza', class: 'XII-IPA-2', password: 'siswa123' }
+        ];
+
+        const dummyAttendances = [
+            { id: 'att1', nis: '1001', name: 'Ahmad Fauzi', date: new Date().toISOString().split('T')[0], time: '07:15:20', status: 'Hadir' }
+        ];
+
+        if ('serviceWorker' in navigator) {
+            const swCode = `
+                self.addEventListener('install', e => e.waitUntil(self.skipWaiting()));
+                self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
+                self.addEventListener('fetch', e => e.respondWith(fetch(e.request)));
+            `;
+            const blob = new Blob([swCode], { type: 'application/javascript' });
+            navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(err => console.log('SW reg failed:', err));
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+            initApp();
+            document.getElementById('filterReportDate').value = new Date().toISOString().split('T')[0];
+            document.getElementById('currentDateBadge').textContent = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        });
+
+        function initApp() {
+            if (IS_PREVIEW) {
+                document.getElementById('previewBanner').classList.remove('hidden');
+                state.users = [...dummyUsers];
+                state.attendances = [...dummyAttendances];
+                checkAuthState();
+            } else {
+                try {
+                    appFirebase = initializeApp(firebaseConfig);
+                    auth = getAuth(appFirebase);
+                    db = getFirestore(appFirebase);
+                    
+                    onAuthStateChanged(auth, (user) => {
+                        if (user) {
+                            state.currentUser = { uid: user.uid, email: user.email, role: 'admin', name: 'Administrator' };
+                            loadFirestoreData();
+                            renderUIForRole();
+                            navigateTo('dashboard');
+                        } else {
+                            if (state.currentUser?.role !== 'user') {
+                                state.currentUser = null;
+                                renderAuthUI();
+                            }
+                        }
+                    });
+                } catch (e) {
+                    console.error("Firebase init error:", e);
+                }
+            }
+        }
+
+        async function loadFirestoreData() {
+            if (IS_PREVIEW || !db) return;
+            try {
+                // Fetch Participants
+                const usersSnap = await getDocs(collection(db, 'users'));
+                state.users = usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+                // Realtime Attendances
+                onSnapshot(collection(db, 'attendances'), (snapshot) => {
+                    state.attendances = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    renderDashboard();
+                    renderReportsTable();
+                });
+            } catch (err) {
+                console.error("Error loading Firestore data:", err);
+            }
+        }
+
+        window.navigateTo = function(pageId) {
+            if (!state.currentUser) {
+                renderAuthUI();
+                return;
+            }
+
+            document.querySelectorAll('.page-content').forEach(el => el.classList.add('hidden'));
+            const targetPage = document.getElementById(pageId + 'Page');
+            if (targetPage) targetPage.classList.remove('hidden');
+
+            document.querySelectorAll('.nav-item, .mobile-nav-item').forEach(el => {
+                if (el.getAttribute('data-page') === pageId) {
+                    el.classList.add('bg-slate-800', 'text-white', 'text-blue-600');
+                } else {
+                    el.classList.remove('bg-slate-800', 'text-white', 'text-blue-600');
+                }
+            });
+
+            if (pageId === 'dashboard') renderDashboard();
+            if (pageId === 'participants') renderParticipantsTable();
+            if (pageId === 'qr-generator') populateQRDropdown();
+            if (pageId === 'reports') renderReportsTable();
+            if (pageId !== 'scan' && isScannerActive) stopScanner();
+        };
+
+        window.switchAuthTab = function(role) {
+            authRole = role;
+            const tabAdmin = document.getElementById('tabAdmin');
+            const tabUser = document.getElementById('tabUser');
+            const adminFields = document.getElementById('adminLoginFields');
+            const userFields = document.getElementById('userLoginFields');
+
+            if (role === 'admin') {
+                tabAdmin.className = "py-2 text-xs font-semibold rounded-lg transition-all bg-white text-blue-600 shadow-sm";
+                tabUser.className = "py-2 text-xs font-semibold rounded-lg transition-all text-slate-600 hover:text-slate-900";
+                adminFields.classList.remove('hidden');
+                userFields.classList.add('hidden');
+            } else {
+                tabUser.className = "py-2 text-xs font-semibold rounded-lg transition-all bg-white text-blue-600 shadow-sm";
+                tabAdmin.className = "py-2 text-xs font-semibold rounded-lg transition-all text-slate-600 hover:text-slate-900";
+                userFields.classList.remove('hidden');
+                adminFields.classList.add('hidden');
+            }
+        };
+
+        window.handleLogin = async function(e) {
+            e.preventDefault();
+            const errBox = document.getElementById('loginError');
+            errBox.classList.add('hidden');
+
+            if (authRole === 'admin') {
+                const email = document.getElementById('loginEmail').value;
+                const pass = document.getElementById('loginPassword').value;
+
+                if (IS_PREVIEW) {
+                    if (email === 'admin@edudigi.com' && pass === 'admin123') {
+                        state.currentUser = { email, name: 'Admin Demo', role: 'admin' };
+                        checkAuthState();
+                    } else {
+                        showLoginError("Email atau Kata Sandi Admin tidak valid!");
+                    }
+                } else {
+                    try {
+                        await signInWithEmailAndPassword(auth, email, pass);
+                    } catch (err) {
+                        showLoginError("Gagal login admin: " + err.message);
+                    }
+                }
+            } else {
+                const nis = document.getElementById('loginUserNis').value;
+                const pass = document.getElementById('loginPassword').value;
+
+                if (IS_PREVIEW) {
+                    const found = state.users.find(u => u.nis === nis && u.password === pass);
+                    if (found) {
+                        state.currentUser = { ...found, role: 'user' };
+                        checkAuthState();
+                    } else {
+                        showLoginError("NIS atau Kata Sandi Peserta salah!");
+                    }
+                } else {
+                    try {
+                        const q = query(collection(db, 'users'), where('nis', '==', nis), where('password', '==', pass));
+                        const snap = await getDocs(q);
+                        if (!snap.empty) {
+                            const userData = snap.docs[0].data();
+                            state.currentUser = { id: snap.docs[0].id, ...userData, role: 'user' };
+                            renderUIForRole();
+                            navigateTo('dashboard');
+                        } else {
+                            showLoginError("Data Peserta tidak ditemukan!");
+                        }
+                    } catch (err) {
+                        showLoginError("Gagal memvalidasi user: " + err.message);
+                    }
+                }
+            }
+        };
+
+        function showLoginError(msg) {
+            const errBox = document.getElementById('loginError');
+            errBox.textContent = msg;
+            errBox.classList.remove('hidden');
+        }
+
+        function checkAuthState() {
+            if (state.currentUser) {
+                renderUIForRole();
+                navigateTo('dashboard');
+            } else {
+                renderAuthUI();
+            }
+        }
+
+        function renderAuthUI() {
+            document.querySelectorAll('.page-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById('authSection').classList.remove('hidden');
+        }
+
+        function renderUIForRole() {
+            document.getElementById('authSection').classList.add('hidden');
+            const user = state.currentUser;
+            document.getElementById('sidebarUserName').textContent = user.name || user.email;
+            document.getElementById('sidebarUserRole').textContent = user.role === 'admin' ? 'Administrator' : 'Peserta';
+
+            const adminOnlyElements = document.querySelectorAll('.admin-only');
+            if (user.role === 'admin') {
+                adminOnlyElements.forEach(el => el.classList.remove('hidden'));
+            } else {
+                adminOnlyElements.forEach(el => el.classList.add('hidden'));
+            }
+        }
+
+        window.handleLogout = async function() {
+            if (!IS_PREVIEW && auth) {
+                await signOut(auth);
+            }
+            state.currentUser = null;
+            renderAuthUI();
+        };
+
+        function renderDashboard() {
+            const todayStr = new Date().toISOString().split('T')[0];
+            const todayAttendances = state.attendances.filter(a => a.date === todayStr);
+
+            const totalUsers = state.users.length;
+            const presentToday = todayAttendances.filter(a => a.status === 'Hadir').length;
+            const lateToday = todayAttendances.filter(a => a.status === 'Terlambat').length;
+            const percentage = totalUsers > 0 ? Math.round((todayAttendances.length / totalUsers) * 100) : 0;
+
+            document.getElementById('statTotalUsers').textContent = totalUsers;
+            document.getElementById('statPresentToday').textContent = presentToday;
+            document.getElementById('statLateToday').textContent = lateToday;
+            document.getElementById('statPercentage').textContent = percentage + '%';
+
+            const recentTbody = document.getElementById('recentAttendanceTable');
+            recentTbody.innerHTML = '';
+
+            const recentList = [...state.attendances].reverse().slice(0, 5);
+            if (recentList.length === 0) {
+                recentTbody.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-slate-400">Belum ada catatan presensi hari ini.</td></tr>`;
+                return;
+            }
+
+            recentList.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="px-5 py-3 font-semibold text-slate-800">${item.name}</td>
+                    <td class="px-5 py-3 text-slate-500">${item.nis}</td>
+                    <td class="px-5 py-3 text-slate-500">${item.time}</td>
+                    <td class="px-5 py-3">
+                        <span class="px-2.5 py-1 rounded-full text-xs font-semibold ${item.status === 'Hadir' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}">
+                            ${item.status}
+                        </span>
+                    </td>
+                `;
+                recentTbody.appendChild(tr);
+            });
+        }
+
+        window.toggleCameraScanner = function() {
+            if (isScannerActive) {
+                stopScanner();
+            } else {
+                startScanner();
+            }
+        };
+
+        function startScanner() {
+            html5QrcodeScanner = new Html5Qrcode("reader");
+            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+
+            html5QrcodeScanner.start(
+                { facingMode: "environment" },
+                config,
+                onScanSuccess
+            ).then(() => {
+                isScannerActive = true;
+                document.getElementById('btnCameraText').textContent = 'Hentikan Kamera';
+            }).catch(err => {
+                showScanResult("Gagal mengakses kamera: " + err, false);
+            });
+        }
+
+        function stopScanner() {
+            if (html5QrcodeScanner) {
+                html5QrcodeScanner.stop().then(() => {
+                    html5QrcodeScanner.clear();
+                    isScannerActive = false;
+                    document.getElementById('btnCameraText').textContent = 'Mulai Kamera';
+                });
+            }
+        }
+
+        function playBeepSound() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(880, ctx.currentTime);
+                osc.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.15);
+            } catch (e) {}
+        }
+
+        async function onScanSuccess(decodedText) {
+            playBeepSound();
+            const participant = state.users.find(u => u.nis === decodedText || u.id === decodedText);
+
+            if (!participant) {
+                showScanResult("QR Code tidak terdaftar dalam sistem!", false);
+                return;
+            }
+
+            const todayStr = new Date().toISOString().split('T')[0];
+            const alreadyPresent = state.attendances.find(a => a.nis === participant.nis && a.date === todayStr);
+
+            if (alreadyPresent) {
+                showScanResult(`Peserta ${participant.name} sudah melakukan presensi hari ini!`, false);
+                return;
+            }
+
+            const now = new Date();
+            const timeStr = now.toTimeString().split(' ')[0];
+            const status = now.getHours() >= 8 ? 'Terlambat' : 'Hadir';
+
+            const newRecord = {
+                nis: participant.nis,
+                name: participant.name,
+                date: todayStr,
+                time: timeStr,
+                status: status
+            };
+
+            if (IS_PREVIEW) {
+                state.attendances.push({ id: 'att_' + Date.now(), ...newRecord });
+                showScanResult(`Berhasil! ${participant.name} terdata (${status})`, true);
+            } else {
+                try {
+                    await addDoc(collection(db, 'attendances'), newRecord);
+                    showScanResult(`Berhasil! ${participant.name} terdata (${status})`, true);
+                } catch (err) {
+                    showScanResult("Gagal menyimpan presensi: " + err.message, false);
+                }
+            }
+        }
+
+        function showScanResult(msg, isSuccess) {
+            const box = document.getElementById('scanResultBox');
+            box.textContent = msg;
+            box.className = `mt-4 p-4 rounded-xl text-center text-sm font-semibold ${isSuccess ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`;
+            box.classList.remove('hidden');
+        }
+
+        window.renderParticipantsTable = function() {
+            const tbody = document.getElementById('participantsTableBody');
+            tbody.innerHTML = '';
+            const queryText = document.getElementById('searchParticipantInput').value.toLowerCase();
+
+            const filtered = state.users.filter(u => 
+                u.name.toLowerCase().includes(queryText) || 
+                u.nis.toLowerCase().includes(queryText) || 
+                u.class.toLowerCase().includes(queryText)
+            );
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-slate-400">Tidak ada data peserta.</td></tr>`;
+                return;
+            }
+
+            filtered.forEach(u => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="px-5 py-3 font-semibold text-slate-800">${u.nis}</td>
+                    <td class="px-5 py-3 text-slate-700">${u.name}</td>
+                    <td class="px-5 py-3 text-slate-500">${u.class}</td>
+                    <td class="px-5 py-3 text-right">
+                        <button onclick="selectAndGenerateQR('${u.nis}')" class="text-blue-600 hover:text-blue-800 text-xs font-semibold bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100">
+                            Lihat QR
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        };
+
+        window.openAddParticipantModal = function() {
+            document.getElementById('addParticipantModal').classList.remove('hidden');
+        };
+
+        window.closeAddParticipantModal = function() {
+            document.getElementById('addParticipantModal').classList.add('hidden');
+        };
+
+        window.saveParticipant = async function(e) {
+            e.preventDefault();
+            const nis = document.getElementById('newNis').value;
+            const name = document.getElementById('newName').value;
+            const pClass = document.getElementById('newClass').value;
+            const pass = document.getElementById('newPassword').value;
+
+            const newUser = { nis, name, class: pClass, password: pass };
+
+            if (IS_PREVIEW) {
+                state.users.push({ id: Date.now().toString(), ...newUser });
+                closeAddParticipantModal();
+                renderParticipantsTable();
+            } else {
+                try {
+                    await addDoc(collection(db, 'users'), newUser);
+                    closeAddParticipantModal();
+                    loadFirestoreData();
+                } catch (err) {
+                    alert("Gagal menambahkan data: " + err.message);
+                }
+            }
+        };
+
+        function populateQRDropdown() {
+            const select = document.getElementById('qrSelectParticipant');
+            select.innerHTML = '<option value="">-- Pilih Peserta --</option>';
+            state.users.forEach(u => {
+                const opt = document.createElement('option');
+                opt.value = u.nis;
+                opt.textContent = `${u.name} (${u.nis} - ${u.class})`;
+                select.appendChild(opt);
+            });
+        }
+
+        window.selectAndGenerateQR = function(nis) {
+            navigateTo('qr-generator');
+            const select = document.getElementById('qrSelectParticipant');
+            select.value = nis;
+            generateSelectedQR();
+        };
+
+        window.generateSelectedQR = function() {
+            const nis = document.getElementById('qrSelectParticipant').value;
+            const previewCard = document.getElementById('qrCardPreview');
+            const box = document.getElementById('qrcodeBox');
+            box.innerHTML = '';
+
+            if (!nis) {
+                previewCard.classList.add('hidden');
+                return;
+            }
+
+            const p = state.users.find(u => u.nis === nis);
+            if (!p) return;
+
+            document.getElementById('cardParticipantName').textContent = p.name;
+            document.getElementById('cardParticipantNis').textContent = 'NIS/ID: ' + p.nis;
+            document.getElementById('cardParticipantClass').textContent = 'Kelas: ' + p.class;
+
+            new QRCode(box, {
+                text: p.nis,
+                width: 160,
+                height: 160
+            });
+
+            previewCard.classList.remove('hidden');
+        };
+
+        window.renderReportsTable = function() {
+            const tbody = document.getElementById('reportsTableBody');
+            tbody.innerHTML = '';
+
+            const selectedDate = document.getElementById('filterReportDate').value;
+            const selectedStatus = document.getElementById('filterReportStatus').value;
+
+            let filtered = state.attendances;
+
+            if (state.currentUser?.role === 'user') {
+                filtered = filtered.filter(a => a.nis === state.currentUser.nis);
+            }
+
+            if (selectedDate) {
+                filtered = filtered.filter(a => a.date === selectedDate);
+            }
+
+            if (selectedStatus !== 'ALL') {
+                filtered = filtered.filter(a => a.status === selectedStatus);
+            }
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-400">Tidak ada riwayat presensi yang sesuai.</td></tr>`;
+                return;
+            }
+
+            filtered.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="px-5 py-3 font-medium text-slate-700">${item.date}</td>
+                    <td class="px-5 py-3 text-slate-500">${item.time}</td>
+                    <td class="px-5 py-3 font-semibold text-slate-800">${item.name}</td>
+                    <td class="px-5 py-3 text-slate-500">${item.nis}</td>
+                    <td class="px-5 py-3">
+                        <span class="px-2.5 py-1 rounded-full text-xs font-semibold ${item.status === 'Hadir' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}">
+                            ${item.status}
+                        </span>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        };
+
+        window.exportToCSV = function() {
+            let csv = 'Tanggal,Waktu,Nama,NIS,Status\n';
+            state.attendances.forEach(a => {
+                csv += `"${a.date}","${a.time}","${a.name}","${a.nis}","${a.status}"\n`;
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.setAttribute('href', url);
+            a.setAttribute('download', `Rekap_Absensi_${new Date().toISOString().split('T')[0]}.csv`);
+            a.click();
+        };
+    </script>
+</body>
+</html>
